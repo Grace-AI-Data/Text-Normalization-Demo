@@ -23,9 +23,9 @@ from multiprocessing import Pool
 
 
 def preprocessing(file):
-    print('Launch Processing of {}'.format(file))
+    print(f'Launch Processing of {file}')
     output = file+'_processed.csv'
- 
+
     # By default, Pandas treats double quote as enclosing an entry so it includes all tabs and newlines in that entry
     # until it reaches the next quote. To escape it we need to have the quoting argument set to QUOTE_NONE or 3 as
     # given in the documentation - [https://pandas.pydata.org/pandas-docs/stable/generated/pandas.read_csv.html]
@@ -51,14 +51,14 @@ def preprocessing(file):
             continue
         else:
             token_id += 1
-            
+
         new_row = {'sentence_id': sentence_id,
                    'token_id': token_id,
                    'semiotic': row.semiotic,
                    'before': row.before,
                    'after': row.after}
-        data = data.append(new_row, ignore_index=True)    
-        print('Processing Sentence#{} of {}'.format(sentence_id, file))
+        data = data.append(new_row, ignore_index=True)
+        print(f'Processing Sentence#{sentence_id} of {file}')
 
     # **Transforming 'after' tokens**  
     # From the above mentioned paper:
@@ -73,13 +73,13 @@ def preprocessing(file):
     # 2. < self > is replaced with the before column
     # 
     sil_mask = (data['after'] == 'sil')
-    data.loc[sil_mask, 'after'] = '<self>' 
+    data.loc[sil_mask, 'after'] = '<self>'
     self_mask = (data['after'] == '<self>')
     data.loc[self_mask, ('after')] = data.loc[self_mask, 'before']
 
     # Exporting Data
     data.to_csv(output, index=False)
-    print('Done {}'.format(file))
+    print(f'Done {file}')
     return True
 
 def split_dataframe(df, size=10*1024*1024):
@@ -91,10 +91,7 @@ def split_dataframe(df, size=10*1024*1024):
     row_limit = int(size // row_size)
     # number of segments
     seg_num = (len(df)+row_limit-1)//row_limit
-    # split df into segments
-    segments = [df.iloc[i*row_limit : (i+1)*row_limit] for i in range(seg_num)]
-
-    return segments
+    return [df.iloc[i*row_limit : (i+1)*row_limit] for i in range(seg_num)]
 
 
 if __name__ == '__main__':
@@ -104,20 +101,18 @@ if __name__ == '__main__':
     # split large CSVs
     for dirpath, _, filenames in os.walk(path):
         for file in filenames:
-            df = pd.read_csv(os.path.join(dirpath, file),header=None, sep='\t', quoting = 3, names=['semiotic', 'before', 'after'])            
+            df = pd.read_csv(os.path.join(dirpath, file),header=None, sep='\t', quoting = 3, names=['semiotic', 'before', 'after'])
             df_splits = split_dataframe(df, 10*1024*1024)
             # save each split and delete original
             for i in range(len(df_splits)):
-                split_file = file+'_part{}'.format(i+1)
+                split_file = file + f'_part{i + 1}'
                 df_splits[i].to_csv(os.path.join(dirpath, split_file))
-            os.remove(os.path.join(dirpath, file)) 
+            os.remove(os.path.join(dirpath, file))
     print("Splitted original file into chunks...")
 
     files=[]
     for dirpath, _, filenames in os.walk(path):
-        for file in filenames:
-            files.append(os.path.join(dirpath, file))
-
+        files.extend(os.path.join(dirpath, file) for file in filenames)
     pool=Pool(jobs)
     pool.map(preprocessing, files)
 

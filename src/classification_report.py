@@ -39,8 +39,11 @@ def f1_scores(results, truth):
 
 def confusion_matrix(results, truth, lang):
 	matrix = cm(truth['class'].tolist(), results['class'].tolist())
-	plot_confusion_matrix(matrix, classes=['ToBeNormalized', 'RemainSelf'], 
-		title='XGBoost Confusion Matrix [{}]'.format(lang))
+	plot_confusion_matrix(
+		matrix,
+		classes=['ToBeNormalized', 'RemainSelf'],
+		title=f'XGBoost Confusion Matrix [{lang}]',
+	)
 	
 def pr_curve(results, truth, lang):
 	truth.loc[truth['class']=='ToBeNormalized', 'class'] = 1

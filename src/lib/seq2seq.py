@@ -64,7 +64,7 @@ class Seq2SeqModel(object):
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
         self.global_epoch_step = tf.Variable(0, trainable=False, name='global_epoch_step')
         self.global_epoch_step_op = \
-            tf.assign(self.global_epoch_step, self.global_epoch_step + 1)
+                tf.assign(self.global_epoch_step, self.global_epoch_step + 1)
 
         self.dtype = tf.float16 if config['use_fp16'] else tf.float32
         self.keep_prob_placeholder = tf.placeholder(self.dtype, shape=[], name='keep_prob')
@@ -72,13 +72,13 @@ class Seq2SeqModel(object):
         self.use_beamsearch_decode = False
         if self.mode == 'decode':
             self.beam_width = config['beam_width']
-            self.use_beamsearch_decode = True if self.beam_width > 1 else False
+            self.use_beamsearch_decode = self.beam_width > 1
             self.max_decode_step = config['max_decode_step']
         else:
             self.optimizer = config['optimizer']
             self.learning_rate = config['learning_rate']
             self.max_gradient_norm = config['max_gradient_norm']
-            
+
         if (self.cell_type == 'dnc'):
             self.num_reads = config['num_reads']
             self.num_writes = config['num_writes']
@@ -308,7 +308,7 @@ class Seq2SeqModel(object):
                                                                           initial_state=self.decoder_initial_state,
                                                                           beam_width=self.beam_width,
                                                                           output_layer=output_layer, )
-       
+
             (self.decoder_outputs_decode, self.decoder_last_state_decode,
              self.decoder_outputs_length_decode) = (seq2seq.dynamic_decode(
                 decoder=inference_decoder,
@@ -316,20 +316,11 @@ class Seq2SeqModel(object):
                 # impute_finished=True,	# error occurs
                 maximum_iterations=self.max_decode_step))
 
-            if not self.use_beamsearch_decode:
-                # decoder_outputs_decode.sample_id: [batch_size, max_time_step]
-                # Or use argmax to find decoder symbols to emit:
-                # self.decoder_pred_decode = tf.argmax(self.decoder_outputs_decode.rnn_output,
-                #                                      axis=-1, name='decoder_pred_decode')
-
-                # Here, we use expand_dims to be compatible with the result of the beamsearch decoder
-                # decoder_pred_decode: [batch_size, max_time_step, 1] (output_major=False)
-                self.decoder_pred_decode = tf.expand_dims(self.decoder_outputs_decode.sample_id, -1)
-
-            else:
-                # Use beam search to approximately find the most likely translation
-                # decoder_pred_decode: [batch_size, max_time_step, beam_width] (output_major=False)
-                self.decoder_pred_decode = self.decoder_outputs_decode.predicted_ids
+            self.decoder_pred_decode = (
+                self.decoder_outputs_decode.predicted_ids
+                if self.use_beamsearch_decode
+                else tf.expand_dims(self.decoder_outputs_decode.sample_id, -1)
+            )
 
     def build_decoder(self):
         print("building decoder and attention..")
@@ -342,13 +333,8 @@ class Seq2SeqModel(object):
 
     def build_single_cell(self):
 
-        if (self.cell_type.lower() == 'gru'):
-            cell_type = GRUCell
-            cell = cell_type(self.hidden_units)
-        else:
-            cell_type = LSTMCell
-            cell = cell_type(self.hidden_units)
-
+        cell_type = GRUCell if (self.cell_type.lower() == 'gru') else LSTMCell
+        cell = cell_type(self.hidden_units)
         if self.use_dropout:
             cell = DropoutWrapper(cell, dtype=self.dtype,
                                   output_keep_prob=self.keep_prob_placeholder, )
@@ -360,7 +346,7 @@ class Seq2SeqModel(object):
     # Building encoder cell
     def build_encoder_cell(self):
         if (self.cell_type.lower() != 'dnc'):
-            return MultiRNNCell([self.build_single_cell() for i in range(self.depth)])
+            return MultiRNNCell([self.build_single_cell() for _ in range(self.depth)])
         else:
             return self.dnc_cell
 
@@ -424,11 +410,15 @@ class Seq2SeqModel(object):
 
             # Also if beamsearch decoding is used, the batch_size argument in .zero_state
             # should be ${decoder_beam_width} times to the origianl batch_size
-            batch_size = self.batch_size if not self.use_beamsearch_decode \
-                else self.batch_size * self.beam_width
+            batch_size = (
+                self.batch_size * self.beam_width
+                if self.use_beamsearch_decode
+                else self.batch_size
+            )
+
             # Initialised with this encoder state
 
-            initial_state = [state for state in encoder_last_state]
+            initial_state = list(encoder_last_state)
 
             initial_state[-1] = self.decoder_cell_list[-1].zero_state(
                 batch_size=batch_size, dtype=self.dtype)
@@ -477,13 +467,13 @@ class Seq2SeqModel(object):
         # temporary code
         # del tf.get_collection_ref('LAYER_NAME_UIDS')[0]
         save_path = saver.save(sess, save_path=path, global_step=global_step)
-        print('model saved at %s' % save_path)
+        print(f'model saved at {save_path}')
 
     def restore(self, sess, path, var_list=None):
         # var_list = None returns the list of all saveable variables
         saver = tf.train.Saver(var_list,reshape=True)
         saver.restore(sess, save_path=path)
-        print('model restored from %s' % path)
+        print(f'model restored from {path}')
 
     def train(self, sess, encoder_inputs, encoder_inputs_length,
               decoder_inputs, decoder_inputs_length):
@@ -597,10 +587,11 @@ class Seq2SeqModel(object):
                 raise ValueError("Decoder targets and their lengths must be equal in their "
                                  "batch_size, %d != %d" % (target_batch_size, decoder_inputs_length.shape[0]))
 
-        input_feed = {}
+        input_feed = {
+            self.encoder_inputs.name: encoder_inputs,
+            self.encoder_inputs_length.name: encoder_inputs_length,
+        }
 
-        input_feed[self.encoder_inputs.name] = encoder_inputs
-        input_feed[self.encoder_inputs_length.name] = encoder_inputs_length
 
         if not decode:
             input_feed[self.decoder_inputs.name] = decoder_inputs

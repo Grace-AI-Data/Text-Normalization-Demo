@@ -81,12 +81,9 @@ class EncodingGenerator:
             return self.vocab_dict['input']['<UNK>']
 
     def __input_word_lookup(self, word):
-        lookups = []
         word = str(word)
         print
-        for c in word:
-            lookups.append(self.__input_lookup(c))
-        return lookups
+        return [self.__input_lookup(c) for c in word]
 
     def __next_element(self):
         sent = self.train_grp.get_group(self.group_keys[self.sent_id])
@@ -95,16 +92,15 @@ class EncodingGenerator:
             self.token_id = 0
             sent = self.train_grp.get_group(self.group_keys[self.sent_id])
         token_count = sent.shape[0]
-        row_dict = dict()
+        row_dict = {}
         new_row = []
         for k in range(-self.wlook, self.wlook + 1):
             if (k == 0):
                 new_row.append(self.__input_lookup('<norm>'))
                 lookup = self.__input_word_lookup(sent.iloc[k + self.token_id, :]['before'])
                 new_row.extend(lookup)
-                new_row.append(self.__input_lookup('</norm>'))
-                new_row.append(self.__input_lookup(' '))
-            elif ((self.token_id + k < 0 or self.token_id + k > token_count - 1) == False):
+                new_row.extend((self.__input_lookup('</norm>'), self.__input_lookup(' ')))
+            elif self.token_id + k >= 0 and self.token_id + k <= token_count - 1:
                 lookup = self.__input_word_lookup(sent.iloc[k + self.token_id, :]['before'])
                 new_row.extend(lookup)
                 new_row.append(self.__input_lookup(' '))
@@ -118,7 +114,7 @@ class EncodingGenerator:
         self.group_keys = list(self.train_grp.groups.keys())
         input_batches = []
         max_inp_len = 0
-        for b in range(self.row_len):
+        for _ in range(self.row_len):
             i = self.__next_element()
             input_batches.append(i)
             if (len(i) > max_inp_len):
@@ -129,7 +125,7 @@ class EncodingGenerator:
         for b in input_batches:
             input_batches_len[count] = len(b)
             count = count + 1
-            for i in range(0, max_inp_len - len(b)):
+            for _ in range(max_inp_len - len(b)):
                 b.append(self.__input_lookup('<PAD>'))
 
         input_batches = np.array(input_batches)
@@ -157,7 +153,7 @@ class Normalized2String:
             if word == '<EOS>':
                 break
             else:
-                final_str = final_str +' '+ str(word)
+                final_str = f'{final_str} {str(word)}'
         return final_str[1:]
 
     def __output_lookup_inverse(self, id):

@@ -33,7 +33,7 @@ class XGBoostEncodingGenerator:
         
     def context_window_transform(self,data, pad_size,flush_progress=True):
         pre = np.zeros(self.max_num_features)
-        pre = [pre for x in np.arange(pad_size)]
+        pre = [pre for _ in np.arange(pad_size)]
         data = pre + data + pre
         neo_data = []
         for i in np.arange(len(data) - pad_size * 2):
@@ -41,8 +41,7 @@ class XGBoostEncodingGenerator:
             if(flush_progress and i%100==0):
                 print('Processed %f%%'%((i/(len(data) - pad_size * 2-1))*100),end='\r')
             for x in data[i : i + pad_size * 2 + 1]:
-                row.append([self.boundary_letter])
-                row.append(x)
+                row.extend(([self.boundary_letter], x))
             row.append([self.boundary_letter])
             merged=list(itertools.chain(*row))
             neo_data.append(merged)
@@ -62,7 +61,7 @@ class XGBoostEncodingGenerator:
     def encode_csv(self,csv_file):
         csv=pd.read_csv(csv_file)
         encoding=self.encode(csv)
-        print('Finished Encoding %s'%csv_file)
+        print(f'Finished Encoding {csv_file}')
         return encoding
     
     def encode_csvs_parallel(self,csv_list,n_threads=8):
@@ -72,5 +71,4 @@ class XGBoostEncodingGenerator:
         if (n_threads < 1):
             assert ('nthreads is 1, cannot proceeed!')
         threads = Pool(n_threads)
-        all_enc=threads.map(self.encode_csv,csv_list)
-        return all_enc
+        return threads.map(self.encode_csv,csv_list)

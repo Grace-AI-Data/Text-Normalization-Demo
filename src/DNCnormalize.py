@@ -57,12 +57,12 @@ def normalize(enc_data, enc_len, model_path,batch_size=200,use_memory=True):
 	tf.reset_default_graph()
 	dnc_predictions=[]
 	with tf.Session() as sess:
-		print('Using DNC model at {}'.format(model_path))
+		print(f'Using DNC model at {model_path}')
 		model=create_model_decode(batch_size=batch_size,use_memory=use_memory)
 		restore_model(model,sess,model_path)
 
 		num_batches=int(enc_data.shape[0]/batch_size)
-		print('Number of batches: {}'.format(num_batches))
+		print(f'Number of batches: {num_batches}')
 
 		for i in range(num_batches):
 			predict=model.predict(sess,enc_data[i*batch_size:i*batch_size+batch_size],
@@ -70,9 +70,8 @@ def normalize(enc_data, enc_len, model_path,batch_size=200,use_memory=True):
 			predict = np.split(predict,batch_size,axis=0)
 			dnc_predictions.extend(predict)
 
-			if i%(int(num_batches/25)) == 0:
-				print('Normalized {} out of {}'.format((i+1)*batch_size,
-												num_batches*batch_size))
+			if i % (num_batches // 25) == 0:
+				print(f'Normalized {(i + 1) * batch_size} out of {num_batches * batch_size}')
 
 		#Process the last batch by adding zeros to the end
 		if(enc_data.shape[0]%batch_size != 0):
@@ -80,10 +79,10 @@ def normalize(enc_data, enc_len, model_path,batch_size=200,use_memory=True):
 			lastbatch_len= enc_len[num_batches*batch_size:]
 			lastbatch=np.concatenate((lastbatch,np.zeros([batch_size-lastbatch.shape[0],
 												lastbatch.shape[1]])),axis=0)
-			
+
 			lastbatch_len=np.concatenate((lastbatch_len,
 				np.ones([batch_size-lastbatch_len.shape[0]])),axis=0)
-			
+
 			predict=model.predict(sess,lastbatch,lastbatch_len)
 			predict=np.split(predict,batch_size,axis=0)
 			dnc_predictions.extend(predict)
@@ -91,8 +90,7 @@ def normalize(enc_data, enc_len, model_path,batch_size=200,use_memory=True):
 	return dnc_predictions
 
 def create_model_decode(batch_size,use_memory):
-	model = Seq2SeqModel(config,'decode',batch_size,use_memory=use_memory)
-	return model
+	return Seq2SeqModel(config,'decode',batch_size,use_memory=use_memory)
 
 def restore_model(model, sess, model_path):
 	print('Reloading model parameters...')
